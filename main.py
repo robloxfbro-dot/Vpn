@@ -12,6 +12,8 @@ from jnius import autoclass
 import re
 import urllib.parse
 from kivy.clock import Clock
+from kivy.network.urlrequest import UrlRequest
+import base64
 
 class RoundButton(Button):
     def __init__(self, **kwargs):
@@ -41,7 +43,7 @@ class SwillWayVPN(App):
         self.btn_power.bind(on_release=self.toggle_vpn)
         root.add_widget(self.btn_power)
 
-        self.info_label = Label(text="Your IP is visible", font_size='12sp', color=get_color_from_hex('#777777'), size_hint_y=None, height=dp(20))
+        self.info_label = Label(text="IP is visible", font_size='12sp', color=get_color_from_hex('#777777'), size_hint_y=None, height=dp(20))
         root.add_widget(self.info_label)
 
         scroll = ScrollView(bar_width=dp(4))
@@ -50,8 +52,8 @@ class SwillWayVPN(App):
         scroll.add_widget(self.grid)
         root.add_widget(scroll)
 
-        btn_add = Button(text="IMPORT SERVERS FROM CLIPBOARD", size_hint_y=None, height=dp(65), background_color=get_color_from_hex('#2A2A2A'), bold=True)
-        btn_add.bind(on_release=self.add_from_clip)
+        btn_add = Button(text="IMPORT FROM CLIPBOARD", size_hint_y=None, height=dp(65), background_color=get_color_from_hex('#2A2A2A'), bold=True)
+        btn_add.bind(on_release=self.process_clipboard)
         root.add_widget(btn_add)
         return root
 
@@ -77,7 +79,7 @@ class SwillWayVPN(App):
             self.is_connected = False
             self.status.text = "PROTECTION: OFF"
             self.status.color = get_color_from_hex('#FF3333')
-            self.info_label.text = "Your IP is visible"
+            self.info_label.text = "IP is visible"
             self.btn_power.text = "START"
 
     def finish_connect(self, dt):
@@ -87,39 +89,43 @@ class SwillWayVPN(App):
         self.info_label.text = "Traffic encrypted. IP Hidden."
         self.btn_power.text = "STOP"
 
-    def add_from_clip(self, instance):
+    def process_clipboard(self, instance):
         data = Clipboard.paste().strip()
-        if not data:
-            self.status.text = "CLIPBOARD EMPTY"
-            return
+        if not data: return
 
-        # Улучшенный поиск ссылок (берем всё до конца строки)
-        links = re.findall(r'(?:vless|vmess|ss|trojan)://[^\s\n]+', data)
-        
-        if not links:
-            self.status.text = "NO VALID LINKS FOUND"
-            return
+        # Если это ссылка на подписку (http/https)
+        if data.startswith("http"):
+            self.status.text = "DOWNLOADING..."
+            UrlRequest(data, on_success=self.on_sub_success, on_failure=self.on_error, on_error=self.on_error)
+        else:
+            self.add_servers_to_list(data)
 
+    def on_sub_success(self, request, result):
+        try:
+            # Подписки часто зашифрованы в Base64
+            decoded_data = base64.b64decode(result).decode('utf-8')
+            self.add_servers_to_list(decoded_data)
+        except:
+            # Если не Base64, пробуем как обычный текст
+            self.add_servers_to_list(result)
+
+    def on_error(self, request, error):
+        self.status.text = "LINK ERROR"
+
+    def add_servers_to_list(self, text):
+        links = re.findall(r'(?:vless|vmess|ss|trojan)://[^\s\n]+', text)
         for link in links:
             self.servers_count += 1
-            # Декодируем название из части после #
-            name = "Unknown Server"
+            name = "Server"
             if "#" in link:
-                raw_name = link.split("#")[-1]
-                name = urllib.parse.unquote(raw_name)
+                name = urllib.parse.unquote(link.split("#")[-1])
             
-            # Создаем красивую кнопку-карточку сервера
             card = Button(
                 text=f"[{self.servers_count}] {name[:25]}",
-                size_hint_y=None, 
-                height=dp(55), 
-                background_normal='',
-                background_color=get_color_from_hex('#1A1A1A'),
-                halign='left',
-                padding=(dp(15), 0)
+                size_hint_y=None, height=dp(55), 
+                background_normal='', background_color=get_color_from_hex('#1A1A1A'),
+                halign='left', padding=(dp(15), 0)
             )
             card.bind(size=card.setter('text_size'))
             self.grid.add_widget(card)
-        
         self.status.text = f"LOADED {len(links)} SERVERS"
-        self.status.color = get_color_from_hex('#33AAFF')
