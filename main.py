@@ -7,103 +7,99 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.core.clipboard import Clipboard
 from kivy.utils import get_color_from_hex
 from kivy.metrics import dp
-import socket
-import time
-import re
+from jnius import autoclass
 
-class SwillWayApp(App):
+class SwillWayVPN(App):
     def build(self):
         self.is_connected = False
         self.server_widgets = []
-
-        root = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10), canvas_before=None)
         
-        # Заголовок
-        root.add_widget(Label(text="SWILL WAY VPN", bold=True, font_size='22sp', size_hint_y=None, height=dp(50)))
+        root = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
+        
+        top_bar = BoxLayout(size_hint_y=None, height=dp(50))
+        top_bar.add_widget(Label(text="SWILL WAY VPN", bold=True, font_size='22sp'))
+        top_bar.add_widget(Label(text="📑", font_size='25sp', size_hint_x=0.2))
+        root.add_widget(top_bar)
 
-        # Кнопка СТАРТ (Центральная)
+        self.status = Label(text="DISCONNECTED", color=(1, 0, 0, 1), size_hint_y=None, height=dp(30), bold=True)
+        root.add_widget(self.status)
+
         self.btn_power = Button(
             text="START", size_hint=(None, None), size=(dp(130), dp(130)),
             pos_hint={'center_x': 0.5}, background_normal='',
-            background_color=get_color_from_hex('#222222'),
+            background_color=get_color_from_hex('#1A1A1A'),
             color=get_color_from_hex('#00FF00'), bold=True, font_size='24sp'
         )
         self.btn_power.bind(on_release=self.toggle_vpn)
         root.add_widget(self.btn_power)
 
-        # Контейнер для списка серверов
-        scroll = ScrollView(size_hint=(1, 1), bar_width=dp(4))
-        self.server_list = GridLayout(cols=1, spacing=dp(10), size_hint_y=None)
-        self.server_list.bind(minimum_height=self.server_list.setter('height'))
-        scroll.add_widget(self.server_list)
+        scroll = ScrollView(size_hint=(1, 1))
+        self.grid = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
+        self.grid.bind(minimum_height=self.grid.setter('height'))
+        scroll.add_widget(self.grid)
         root.add_widget(scroll)
 
-        # Нижнее меню
-        bottom_menu = BoxLayout(size_hint_y=None, height=dp(65), spacing=dp(10))
-        
-        btn_clip = Button(text="ADD SERVER", background_color=get_color_from_hex('#333333'), bold=True)
-        btn_clip.bind(on_release=self.add_from_clip)
-        
-        btn_ping = Button(text="⚡ PING ALL", background_color=get_color_from_hex('#333333'), bold=True)
+        bottom = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(10))
+        btn_add = Button(text="ADD SERVER", background_color=get_color_from_hex('#333333'), bold=True)
+        btn_add.bind(on_release=self.add_server)
+        btn_ping = Button(text="⚡ PING", background_color=get_color_from_hex('#333333'), bold=True)
         btn_ping.bind(on_release=self.mass_ping)
-
-        bottom_menu.add_widget(btn_clip)
-        bottom_menu.add_widget(btn_ping)
-        root.add_widget(bottom_menu)
+        
+        bottom.add_widget(btn_add)
+        bottom.add_widget(btn_ping)
+        root.add_widget(bottom)
 
         return root
 
-    def add_from_clip(self, instance):
-        raw_data = Clipboard.paste()
-        if "://" in raw_data:
-            # Парсим имя сервера из заметки после #
-            name = "New Server"
-            if "#" in raw_data:
-                name = raw_data.split("#")[-1]
-            
-            # Создаем "Карточку" сервера (BoxLayout вместо одной кнопки)
-            card = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(70), padding=dp(10))
-            
-            # Иконка (просто текст для начала)
-            card.add_widget(Label(text="🌐", size_hint_x=0.2, font_size='20sp'))
-            
-            # Инфо о сервере
+    def toggle_vpn(self, instance):
+        try:
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            VpnService = autoclass('android.net.VpnService')
+            activity = PythonActivity.mActivity
+            intent = VpnService.prepare(activity)
+            if intent:
+                activity.startActivityForResult(intent, 0)
+            else:
+                self.is_connected = not self.is_connected
+                if self.is_connected:
+                    self.status.text = "CONNECTED"
+                    self.status.color = (0, 1, 0, 1)
+                    self.btn_power.text = "STOP"
+                    self.btn_power.color = (1, 0, 0, 1)
+                else:
+                    self.status.text = "DISCONNECTED"
+                    self.status.color = (1, 0, 0, 1)
+                    self.btn_power.text = "START"
+                    self.btn_power.color = (0, 1, 0, 1)
+        except:
+            self.status.text = "PLATFORM ERROR"
+
+    def add_server(self, instance):
+        data = Clipboard.paste()
+        if "://" in data:
+            name = data.split("#")[-1] if "#" in data else f"Server {len(self.server_widgets)+1}"
+            card = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(60), padding=dp(5))
+            card.add_widget(Label(text="🌐", size_hint_x=0.2))
             info = BoxLayout(orientation='vertical')
             info.add_widget(Label(text=name, bold=True, halign='left', text_size=(dp(200), None)))
-            
-            ping_label = Label(text="Ping: --", color=(0.7, 0.7, 0.7, 1), halign='left', text_size=(dp(200), None))
-            info.add_widget(ping_label)
+            ping_lab = Label(text="Ping: --", font_size='12sp', halign='left', text_size=(dp(200), None))
+            info.add_widget(ping_lab)
             card.add_widget(info)
-            
-            # Кнопка выбора этого сервера
-            select_btn = Button(text="USE", size_hint_x=0.25, background_color=get_color_from_hex('#444444'))
-            card.add_widget(select_btn)
-
-            # Сохраняем ссылки для пинга
-            card.ping_label = ping_label
-            card.raw_link = raw_data
-            
-            self.server_list.add_widget(card)
+            card.ping_lab = ping_lab
+            self.grid.add_widget(card)
             self.server_widgets.append(card)
-        else:
-            print("No valid link in clipboard")
-
-    def toggle_vpn(self, instance):
-        self.is_connected = not self.is_connected
-        self.btn_power.text = "STOP" if self.is_connected else "START"
-        self.btn_power.color = (1, 0, 0, 1) if self.is_connected else (0, 1, 0, 1)
 
     def mass_ping(self, instance):
+        import socket
+        import time
         for card in self.server_widgets:
             try:
                 start = time.time()
                 socket.create_connection(("8.8.8.8", 53), timeout=1)
                 p = int((time.time() - start) * 1000)
-                card.ping_label.text = f"Ping: {p}ms"
-                card.ping_label.color = (0, 1, 0, 1) if p < 150 else (1, 1, 0, 1)
+                card.ping_lab.text = f"Ping: {p}ms"
             except:
-                card.ping_label.text = "Offline"
-                card.ping_label.color = (1, 0, 0, 1)
+                card.ping_lab.text = "Offline"
 
 if __name__ == '__main__':
-    SwillWayApp().run()
+    SwillWayVPN().run()
