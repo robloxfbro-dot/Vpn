@@ -23,25 +23,34 @@ class RoundButton(Button):
     def update_canvas(self, *args):
         self.canvas.before.clear()
         with self.canvas.before:
-            Color(rgba=get_color_from_hex('#2A2A2A'))
+            Color(rgba=get_color_from_hex('#1E1E1E'))
             Ellipse(pos=self.pos, size=self.size)
 
 class SwillWayVPN(App):
     def build(self):
         self.is_connected = False
+        self.servers_count = 0
         root = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(10))
-        root.add_widget(Label(text="SWILL WAY VPN", font_size='22sp', bold=True, size_hint_y=None, height=dp(50)))
-        self.status = Label(text="DISCONNECTED", color=get_color_from_hex('#AAAAAA'), size_hint_y=None, height=dp(30))
+        
+        root.add_widget(Label(text="SWILL WAY VPN", font_size='24sp', bold=True, size_hint_y=None, height=dp(50)))
+        
+        self.status = Label(text="PROTECTION: OFF", color=get_color_from_hex('#FF3333'), size_hint_y=None, height=dp(30), bold=True)
         root.add_widget(self.status)
-        self.btn_power = RoundButton(text="START", size_hint=(None, None), size=(dp(160), dp(160)), pos_hint={'center_x': 0.5})
+
+        self.btn_power = RoundButton(text="START", size_hint=(None, None), size=(dp(170), dp(170)), pos_hint={'center_x': 0.5}, font_size='22sp', bold=True)
         self.btn_power.bind(on_release=self.toggle_vpn)
         root.add_widget(self.btn_power)
+
+        self.info_label = Label(text="Your IP is visible", font_size='12sp', color=get_color_from_hex('#777777'), size_hint_y=None, height=dp(20))
+        root.add_widget(self.info_label)
+
         scroll = ScrollView(bar_width=dp(4))
-        self.grid = GridLayout(cols=1, spacing=dp(10), size_hint_y=None)
+        self.grid = GridLayout(cols=1, spacing=dp(12), size_hint_y=None)
         self.grid.bind(minimum_height=self.grid.setter('height'))
         scroll.add_widget(self.grid)
         root.add_widget(scroll)
-        btn_add = Button(text="ADD ALL SERVERS", size_hint_y=None, height=dp(60), background_color=get_color_from_hex('#333333'))
+
+        btn_add = Button(text="IMPORT SERVERS FROM CLIPBOARD", size_hint_y=None, height=dp(65), background_color=get_color_from_hex('#2A2A2A'), bold=True)
         btn_add.bind(on_release=self.add_from_clip)
         root.add_widget(btn_add)
         return root
@@ -61,30 +70,56 @@ class SwillWayVPN(App):
 
     def start_service_logic(self):
         if not self.is_connected:
-            self.status.text = "CONNECTING..."
+            self.status.text = "ENCRYPTING..."
             self.status.color = get_color_from_hex('#FFFF00')
             Clock.schedule_once(self.finish_connect, 2)
         else:
             self.is_connected = False
-            self.status.text = "DISCONNECTED"
-            self.status.color = get_color_from_hex('#AAAAAA')
+            self.status.text = "PROTECTION: OFF"
+            self.status.color = get_color_from_hex('#FF3333')
+            self.info_label.text = "Your IP is visible"
             self.btn_power.text = "START"
 
     def finish_connect(self, dt):
         self.is_connected = True
-        self.status.text = "ACTIVE"
-        self.status.color = get_color_from_hex('#00FF00')
+        self.status.text = "PROTECTION: ACTIVE"
+        self.status.color = get_color_from_hex('#33FF33')
+        self.info_label.text = "Traffic encrypted. IP Hidden."
         self.btn_power.text = "STOP"
 
     def add_from_clip(self, instance):
-        data = Clipboard.paste()
-        links = re.findall(r'(vless|vmess|ss|trojan)://[^\s]+', data)
-        if not links: return
-        for link in links:
-            name_part = re.search(r'#(.+)$', link)
-            name = urllib.parse.unquote(name_part.group(1)) if name_part else "Server"
-            card = Button(text=f"SERVER: {name}", size_hint_y=None, height=dp(60), background_color=get_color_from_hex('#222222'))
-            self.grid.add_widget(card)
+        data = Clipboard.paste().strip()
+        if not data:
+            self.status.text = "CLIPBOARD EMPTY"
+            return
 
-if __name__ == '__main__':
-    SwillWayVPN().run()
+        # Улучшенный поиск ссылок (берем всё до конца строки)
+        links = re.findall(r'(?:vless|vmess|ss|trojan)://[^\s\n]+', data)
+        
+        if not links:
+            self.status.text = "NO VALID LINKS FOUND"
+            return
+
+        for link in links:
+            self.servers_count += 1
+            # Декодируем название из части после #
+            name = "Unknown Server"
+            if "#" in link:
+                raw_name = link.split("#")[-1]
+                name = urllib.parse.unquote(raw_name)
+            
+            # Создаем красивую кнопку-карточку сервера
+            card = Button(
+                text=f"[{self.servers_count}] {name[:25]}",
+                size_hint_y=None, 
+                height=dp(55), 
+                background_normal='',
+                background_color=get_color_from_hex('#1A1A1A'),
+                halign='left',
+                padding=(dp(15), 0)
+            )
+            card.bind(size=card.setter('text_size'))
+            self.grid.add_widget(card)
+        
+        self.status.text = f"LOADED {len(links)} SERVERS"
+        self.status.color = get_color_from_hex('#33AAFF')
