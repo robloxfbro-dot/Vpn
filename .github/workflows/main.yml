@@ -5,10 +5,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Build with Buildozer
-        uses: ArtemSBulat/buildozer-action@v1
+        uses: ArtemSBulat/buildozer-action@v1.2
         with:
-          buildozer_version: master
-          python_version: 3.8
-
+          command: buildozer android debug
