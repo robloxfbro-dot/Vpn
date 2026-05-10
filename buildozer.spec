@@ -10,3 +10,4 @@ orientation = portrait
 fullscreen = 0
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
+android.permissions = INTERNET, ACCESS_NETWORK_STATE
