@@ -5,8 +5,8 @@ package.domain = org.swillway
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 source.include_patterns = libs/*,service/*
-version = 0.3
-requirements = python3,kivy,pyjnius
+version = 1.0
+requirements = python3,kivy==2.2.1,pyjnius,requests,certifi
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET, ACCESS_NETWORK_STATE, BIND_VPN_SERVICE, FOREGROUND_SERVICE
