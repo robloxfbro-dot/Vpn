@@ -8,20 +8,23 @@ from kivy.core.clipboard import Clipboard
 from kivy.utils import get_color_from_hex
 from kivy.metrics import dp
 from jnius import autoclass
+import re
+import socket
+import time
+import urllib.parse
+import os
+import subprocess
 
 class SwillWayVPN(App):
     def build(self):
         self.is_connected = False
         self.server_widgets = []
+        self.vpn_process = None
         
         root = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
+        root.add_widget(Label(text="SWILL WAY VPN", bold=True, font_size='22sp', size_hint_y=None, height=dp(50)))
         
-        top_bar = BoxLayout(size_hint_y=None, height=dp(50))
-        top_bar.add_widget(Label(text="SWILL WAY VPN", bold=True, font_size='22sp'))
-        top_bar.add_widget(Label(text="📑", font_size='25sp', size_hint_x=0.2))
-        root.add_widget(top_bar)
-
-        self.status = Label(text="DISCONNECTED", color=(1, 0, 0, 1), size_hint_y=None, height=dp(30), bold=True)
+        self.status = Label(text="READY", color=(1, 1, 1, 1), size_hint_y=None, height=dp(30), bold=True)
         root.add_widget(self.status)
 
         self.btn_power = Button(
@@ -40,10 +43,10 @@ class SwillWayVPN(App):
         root.add_widget(scroll)
 
         bottom = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(10))
-        btn_add = Button(text="ADD SERVER", background_color=get_color_from_hex('#333333'), bold=True)
-        btn_add.bind(on_release=self.add_server)
+        btn_add = Button(text="ADD ALL", background_color=get_color_from_hex('#333333'), bold=True)
+        btn_add.bind(on_release=self.add_from_clip)
         btn_ping = Button(text="⚡ PING", background_color=get_color_from_hex('#333333'), bold=True)
-        btn_ping.bind(on_release=self.mass_ping)
+        btn_ping.bind(on_release=self.run_ping)
         
         bottom.add_widget(btn_add)
         bottom.add_widget(btn_ping)
@@ -57,49 +60,65 @@ class SwillWayVPN(App):
             VpnService = autoclass('android.net.VpnService')
             activity = PythonActivity.mActivity
             intent = VpnService.prepare(activity)
+            
             if intent:
                 activity.startActivityForResult(intent, 0)
             else:
-                self.is_connected = not self.is_connected
-                if self.is_connected:
-                    self.status.text = "CONNECTED"
-                    self.status.color = (0, 1, 0, 1)
-                    self.btn_power.text = "STOP"
-                    self.btn_power.color = (1, 0, 0, 1)
+                if not self.is_connected:
+                    self.run_core()
                 else:
-                    self.status.text = "DISCONNECTED"
-                    self.status.color = (1, 0, 0, 1)
-                    self.btn_power.text = "START"
-                    self.btn_power.color = (0, 1, 0, 1)
+                    self.stop_core()
         except:
-            self.status.text = "PLATFORM ERROR"
+            self.status.text = "SYS ERROR"
 
-    def add_server(self, instance):
+    def run_core(self):
+        try:
+            lib_path = os.path.join(self.user_data_dir, "libs", "xray")
+            if os.path.exists(lib_path):
+                os.chmod(lib_path, 0o755)
+                self.vpn_process = subprocess.Popen([lib_path, "-version"])
+                self.is_connected = True
+                self.status.text = "ACTIVE"
+                self.btn_power.text = "STOP"
+                self.btn_power.color = (1, 0, 0, 1)
+            else:
+                self.status.text = "CORE NOT FOUND"
+        except:
+            self.status.text = "START FAILED"
+
+    def stop_core(self):
+        if self.vpn_process:
+            self.vpn_process.terminate()
+        self.is_connected = False
+        self.status.text = "DISCONNECTED"
+        self.btn_power.text = "START"
+        self.btn_power.color = (0, 1, 0, 1)
+
+    def add_from_clip(self, instance):
         data = Clipboard.paste()
-        if "://" in data:
-            name = data.split("#")[-1] if "#" in data else f"Server {len(self.server_widgets)+1}"
-            card = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(60), padding=dp(5))
-            card.add_widget(Label(text="🌐", size_hint_x=0.2))
+        links = re.findall(r'[a-zA-Z0-9]+://[^\s]+', data)
+        for link in links:
+            name = urllib.parse.unquote(link.split("#")[-1] if "#" in link else "Server")
+            card = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(65), padding=dp(5))
+            card.add_widget(Label(text="🌐", size_hint_x=0.15))
             info = BoxLayout(orientation='vertical')
-            info.add_widget(Label(text=name, bold=True, halign='left', text_size=(dp(200), None)))
-            ping_lab = Label(text="Ping: --", font_size='12sp', halign='left', text_size=(dp(200), None))
-            info.add_widget(ping_lab)
+            info.add_widget(Label(text=name, bold=True, halign='left'))
+            p_lab = Label(text="Ping: --", font_size='12sp', halign='left')
+            info.add_widget(p_lab)
             card.add_widget(info)
-            card.ping_lab = ping_lab
+            card.p_lab = p_lab
             self.grid.add_widget(card)
             self.server_widgets.append(card)
 
-    def mass_ping(self, instance):
-        import socket
-        import time
+    def run_ping(self, instance):
         for card in self.server_widgets:
             try:
                 start = time.time()
-                socket.create_connection(("8.8.8.8", 53), timeout=1)
+                socket.create_connection(("8.8.8.8", 53), timeout=0.8)
                 p = int((time.time() - start) * 1000)
-                card.ping_lab.text = f"Ping: {p}ms"
+                card.p_lab.text = f"Ping: {p}ms"
             except:
-                card.ping_lab.text = "Offline"
+                card.p_lab.text = "Error"
 
 if __name__ == '__main__':
     SwillWayVPN().run()
