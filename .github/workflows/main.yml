@@ -16,3 +16,7 @@ jobs:
       - run: |
           export PATH=$PATH:$HOME/.local/bin
           yes | buildozer android debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vpn-app-file
+          path: bin/*.apk
