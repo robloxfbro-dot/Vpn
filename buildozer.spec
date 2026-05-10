@@ -4,18 +4,17 @@ package.name = swillwayvpn
 package.domain = org.swillway
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
+source.include_patterns = libs/*
 version = 0.1
 requirements = python3,kivy,pyjnius
 orientation = portrait
-osx.python_version = 3
-osx.kivy_version = 1.9.1
 fullscreen = 0
 android.permissions = INTERNET, ACCESS_NETWORK_STATE, BIND_VPN_SERVICE, FOREGROUND_SERVICE
 android.api = 33
 android.minapi = 21
 android.sdk = 33
 android.ndk = 25b
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 android.accept_sdk_license = True
 
 [buildozer]
